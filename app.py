@@ -16,6 +16,7 @@ CLIENTS = [
     }
 ]
 
+# Sky Broking Correct API Base Endpoint
 SKY_API_ORDER_URL = "https://api.skybroking.com/v1/orders/place"
 
 # HTML Dashboard Page
@@ -27,13 +28,13 @@ HTML_PAGE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; padding: 20px; }
-        .card { background: #1e1e1e; max-width: 500px; margin: auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .card { background: #1e1e1e; max-width: 480px; margin: auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #333; background: #2a2a2a; color: #fff; font-size: 16px; text-align: center; }
         button { width: 95%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
         .btn-buy-ce { background: #00c853; color: white; }
         .btn-buy-pe { background: #d50000; color: white; }
         .btn-exit { background: #ff9100; color: white; }
-        #status { margin-top: 15px; font-size: 13px; font-weight: bold; color: #ffea00; text-align: left; background: #111; padding: 10px; border-radius: 6px; overflow-x: auto; font-family: monospace; }
+        #status { margin-top: 15px; font-size: 12px; font-weight: bold; color: #ffea00; text-align: left; background: #111; padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -58,7 +59,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Order Sending...";
+            document.getElementById('status').innerText = "Sending Order to Sky Broking...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -92,32 +93,40 @@ def manual_order():
         results = []
         for client in CLIENTS:
             qty = client['lots'] * 50
+            
+            # Formatted Payload for Sky Broking
             order_payload = {
                 "client_id": client['client_id'],
-                "symbol": symbol,
+                "tradingsymbol": symbol,
+                "exchange": "NFO",
                 "transaction_type": action,
                 "quantity": qty,
                 "order_type": "MARKET",
-                "product": "MIS"
+                "product": "MIS",
+                "validity": "DAY"
             }
+            
             headers = {
                 "Content-Type": "application/json",
+                "x-api-key": client['secret_code'],
                 "Authorization": f"Bearer {client['secret_code']}"
             }
             
             try:
-                response = requests.post(SKY_API_ORDER_URL, json=order_payload, headers=headers, timeout=5)
-                res_data = response.json()
+                response = requests.post(SKY_API_ORDER_URL, json=order_payload, headers=headers, timeout=8)
+                try:
+                    res_data = response.json()
+                except Exception:
+                    res_data = {"raw_response": response.text, "status_code": response.status_code}
             except Exception as req_err:
                 res_data = {"error": str(req_err)}
 
             results.append({
                 "client": client['name'],
-                "sent_payload": order_payload,
                 "broker_response": res_data
             })
             
-        return jsonify({"results": results}), 200
+        return jsonify({"status": "Completed", "details": results}), 200
 
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 400
