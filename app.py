@@ -5,7 +5,7 @@ import os
 app = Flask(__name__)
 
 # =========================================================
-# உங்கள் & கிளையண்டுகளின் API விவரங்கள் (Client Accounts)
+# Client Accounts List
 # =========================================================
 CLIENTS = [
     {
@@ -13,24 +13,17 @@ CLIENTS = [
         "client_id": "SKY62341_U",
         "secret_code": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
         "lots": 1  # 1 Lot = 50 Qty
-    },
-    # புதிய Clients வரும்போது கீழே Add செய்துகொள்ளலாம்:
-    # {
-    #     "name": "Client 2",
-    #     "client_id": "CLIENT_ID_2",
-    #     "secret_code": "SECRET_CODE_2",
-    #     "lots": 2
-    # }
+    }
 ]
 
 SKY_API_ORDER_URL = "https://api.skybroking.com/v1/orders/place"
 
-# HTML Dashboard Page (1-Click UI)
+# HTML Dashboard Page
 HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>1-Click Algo Control</title>
+    <title>1-Click Algo Master</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; padding: 20px; }
@@ -91,15 +84,12 @@ def home():
 def manual_order():
     try:
         data = request.json
-        action = data.get('action') # BUY அல்லது SELL (EXIT)
+        action = data.get('action')
         symbol = data.get('symbol')
         
         results = []
-        
-        # அனைத்து Clients-களுக்கும் ஒரே நேரத்தில் Order அனுப்புதல்
         for client in CLIENTS:
-            qty = client['lots'] * 50 # 1 Lot = 50 Quantity
-            
+            qty = client['lots'] * 50
             order_payload = {
                 "client_id": client['client_id'],
                 "symbol": symbol,
@@ -108,12 +98,10 @@ def manual_order():
                 "order_type": "MARKET",
                 "product": "MIS"
             }
-            
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {client['secret_code']}"
             }
-            
             response = requests.post(SKY_API_ORDER_URL, json=order_payload, headers=headers)
             results.append({client['name']: response.json()})
             
