@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
 from NorenRestApiPy.NorenApi import NorenApi
+import traceback
 import os
 
 app = Flask(__name__)
@@ -18,7 +19,12 @@ CLIENTS = [
 
 class SkyBrokingAPI(NorenApi):
     def __init__(self):
-        NorenApi.__init__(self, host='https://skypro.skybroking.com/NorenWClientTP/', websocket='wss://skypro.skybroking.com/NorenWSS/')
+        # Updated Official Sky Broking Base URL
+        NorenApi.__init__(
+            self, 
+            host='https://skypro.skybroking.com/NorenWClientTP', 
+            websocket='wss://skypro.skybroking.com/NorenWSS/'
+        )
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -97,11 +103,15 @@ def manual_order():
             try:
                 api = SkyBrokingAPI()
                 
-                # Set Session Token
-                api.set_session(userid=client['client_id'], password='', usertoken=client['secret_code'])
+                # Session Set
+                session_res = api.set_session(
+                    userid=client['client_id'], 
+                    password='', 
+                    usertoken=client['secret_code']
+                )
                 
-                # Place Order with exact parameter names
-                res = api.place_order(
+                # Place Order
+                order_res = api.place_order(
                     buy_or_sell='B' if action == 'BUY' else 'S',
                     product_type='M',
                     exchange='NFO',
@@ -112,8 +122,16 @@ def manual_order():
                     price=0,
                     retention='DAY'
                 )
+                
+                res = {
+                    "session_info": session_res,
+                    "order_info": order_res
+                }
             except Exception as sdk_err:
-                res = {"error": str(sdk_err)}
+                res = {
+                    "error": str(sdk_err),
+                    "trace": traceback.format_exc()
+                }
 
             results.append({
                 "client": client['name'],
