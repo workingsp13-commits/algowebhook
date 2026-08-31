@@ -16,7 +16,6 @@ CLIENTS = [
     }
 ]
 
-# Helper class for Sky Broking API Connection
 class SkyBrokingAPI(NorenApi):
     def __init__(self):
         NorenApi.__init__(self, host='https://skypro.skybroking.com/NorenWClientTP/', websocket='wss://skypro.skybroking.com/NorenWSS/')
@@ -60,7 +59,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Connecting to Sky Broking SDK...";
+            document.getElementById('status').innerText = "Sending Order via Sky Broking SDK...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -97,8 +96,9 @@ def manual_order():
             
             try:
                 api = SkyBrokingAPI()
-                # Set Session Token directly
-                api.set_token(client['secret_code'])
+                
+                # Correct Session Token Initialization
+                api.set_session(userid=client['client_id'], password='', usertoken=client['secret_code'])
                 
                 # Place Order using Official SDK
                 res = api.place_order(
