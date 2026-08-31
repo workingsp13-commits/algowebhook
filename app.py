@@ -27,20 +27,20 @@ HTML_PAGE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; padding: 20px; }
-        .card { background: #1e1e1e; max-width: 450px; margin: auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .card { background: #1e1e1e; max-width: 500px; margin: auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #333; background: #2a2a2a; color: #fff; font-size: 16px; text-align: center; }
         button { width: 95%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
         .btn-buy-ce { background: #00c853; color: white; }
         .btn-buy-pe { background: #d50000; color: white; }
         .btn-exit { background: #ff9100; color: white; }
-        #status { margin-top: 15px; font-size: 13px; font-weight: bold; color: #ffea00; word-break: break-all; }
+        #status { margin-top: 15px; font-size: 13px; font-weight: bold; color: #ffea00; text-align: left; background: #111; padding: 10px; border-radius: 6px; overflow-x: auto; font-family: monospace; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>🚀 Algo 1-Click Master</h2>
         <label>Enter Strike Price Symbol:</label>
-        <input type="text" id="symbol" placeholder="E.g: NIFTY26SEP24500CE">
+        <input type="text" id="symbol" placeholder="E.g: NIFTY01SEP2624200PE">
         
         <button class="btn-buy-ce" onclick="sendOrder('BUY')">BUY CALL (CE)</button>
         <button class="btn-buy-pe" onclick="sendOrder('BUY')">BUY PUT (PE)</button>
@@ -59,7 +59,6 @@ HTML_PAGE = """
             }
             
             document.getElementById('status').innerText = "Order Sending...";
-            document.getElementById('status').style.color = "#ffeb3b";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -69,11 +68,9 @@ HTML_PAGE = """
                 });
 
                 let res = await response.json();
-                document.getElementById('status').innerText = "Broker Response: " + JSON.stringify(res);
-                document.getElementById('status').style.color = res.status === "Success" ? "#00e676" : "#ff5252";
+                document.getElementById('status').innerText = JSON.stringify(res, null, 2);
             } catch (err) {
                 document.getElementById('status').innerText = "Error: " + err.message;
-                document.getElementById('status').style.color = "#ff5252";
             }
         }
     </script>
@@ -114,9 +111,13 @@ def manual_order():
             except Exception as req_err:
                 res_data = {"error": str(req_err)}
 
-            results.append({client['name']: res_data})
+            results.append({
+                "client": client['name'],
+                "sent_payload": order_payload,
+                "broker_response": res_data
+            })
             
-        return jsonify({"status": "Success", "details": results}), 200
+        return jsonify({"results": results}), 200
 
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 400
