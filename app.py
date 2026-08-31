@@ -1,9 +1,12 @@
 from flask import Flask, request, jsonify, render_template_string
-import requests
+from NorenRestApiPy.NorenApi import NorenApi
 import os
 
 app = Flask(__name__)
 
+# =========================================================
+# Client Accounts List
+# =========================================================
 CLIENTS = [
     {
         "name": "Admin (Prasanth)",
@@ -13,8 +16,10 @@ CLIENTS = [
     }
 ]
 
-# Sky Broking / GoPocket Noren API Endpoint
-SKY_API_ORDER_URL = "https://skypro.skybroking.com/NorenWClientTP/QuickOrder"
+# Helper class for Sky Broking API Connection
+class SkyBrokingAPI(NorenApi):
+    def __init__(self):
+        NorenApi.__init__(self, host='https://skypro.skybroking.com/NorenWClientTP/', websocket='wss://skypro.skybroking.com/NorenWSS/')
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -44,7 +49,7 @@ HTML_PAGE = """
         <hr style="border-color:#333;">
         <button class="btn-exit" onclick="sendOrder('SELL')">⚠️ SAFE EXIT ALL (SQUARE OFF)</button>
         
-        <div id="status">Status: Waiting for action...</div>
+        <div id="status">Status: Ready</div>
     </div>
 
     <script>
@@ -55,13 +60,13 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Processing request...";
+            document.getElementById('status').innerText = "Connecting to Sky Broking SDK...";
 
             try {
                 let response = await fetch('/manual-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action, symbol: symbolInput })
+                    body: JSON.stringify({ action: action, symbol: symbolInput.toUpperCase() })
                 });
 
                 let res = await response.json();
@@ -90,43 +95,32 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            order_payload = {
-                "uid": client['client_id'],
-                "actid": client['client_id'],
-                "exch": "NFO",
-                "tsym": symbol,
-                "qty": str(qty),
-                "prc": "0",
-                "prd": "M",
-                "trantype": "B" if action == "BUY" else "S",
-                "prctyp": "MKT",
-                "ret": "DAY"
-            }
-            
-            headers = {
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-            
             try:
-                # Transmit as form payload for SkyBroking Noren server
-                response = requests.post(SKY_API_ORDER_URL, data=f"jData={jsonify(order_payload).get_data(as_text=True)}&jKey={client['secret_code']}", headers=headers, timeout=10)
+                api = SkyBrokingAPI()
+                # Set Session Token directly
+                api.set_token(client['secret_code'])
                 
-                try:
-                    res_data = response.json()
-                except Exception:
-                    res_data = {
-                        "http_code": response.status_code,
-                        "raw_body": response.text[:200] if response.text else "Empty Response"
-                    }
-            except Exception as req_err:
-                res_data = {"error_details": str(req_err)}
+                # Place Order using Official SDK
+                res = api.place_order(
+                    buy_or_sell='B' if action == 'BUY' else 'S',
+                    product_type='M',
+                    exchange='NFO',
+                    tradingsymbol=symbol,
+                    quantity=qty,
+                    disclosequantity=0,
+                    price_type='MKT',
+                    price=0,
+                    retention='DAY'
+                )
+            except Exception as sdk_err:
+                res = {"error": str(sdk_err)}
 
             results.append({
                 "client": client['name'],
-                "response": res_data
+                "broker_response": res
             })
             
-        return jsonify({"status": "Executed", "data": results}), 200
+        return jsonify({"status": "Completed", "details": results}), 200
 
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 400
