@@ -97,17 +97,17 @@ def manual_order():
             try:
                 api = SkyBrokingAPI()
                 
-                # Correct Session Token Initialization
+                # Set Session Token
                 api.set_session(userid=client['client_id'], password='', usertoken=client['secret_code'])
                 
-                # Place Order using Official SDK
+                # Place Order with exact parameter names
                 res = api.place_order(
                     buy_or_sell='B' if action == 'BUY' else 'S',
                     product_type='M',
                     exchange='NFO',
                     tradingsymbol=symbol,
                     quantity=qty,
-                    disclosequantity=0,
+                    discloseqty=0,
                     price_type='MKT',
                     price=0,
                     retention='DAY'
