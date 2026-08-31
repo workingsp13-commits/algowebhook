@@ -80,6 +80,10 @@ HTML_PAGE = """
 def home():
     return render_template_string(HTML_PAGE)
 
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    return jsonify({"status": "Webhook Active"}), 200
+
 @app.route('/manual-order', methods=['POST'])
 def manual_order():
     try:
