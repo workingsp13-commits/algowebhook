@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
-from NorenRestApiPy.NorenApi import NorenApi
-import traceback
+import requests
+import json
 import os
 
 app = Flask(__name__)
@@ -17,14 +17,8 @@ CLIENTS = [
     }
 ]
 
-class SkyBrokingAPI(NorenApi):
-    def __init__(self):
-        # Updated Official Sky Broking Base URL
-        NorenApi.__init__(
-            self, 
-            host='https://skypro.skybroking.com/NorenWClientTP', 
-            websocket='wss://skypro.skybroking.com/NorenWSS/'
-        )
+# Sky Broking Official Quick Order Endpoint
+SKY_ORDER_URL = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -65,7 +59,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Sending Order via Sky Broking SDK...";
+            document.getElementById('status').innerText = "Processing direct API order...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -100,42 +94,47 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
+            # Exact Payload required by Noren Engine
+            payload_data = {
+                "uid": client['client_id'],
+                "actid": client['client_id'],
+                "exch": "NFO",
+                "tsym": symbol,
+                "qty": str(qty),
+                "prc": "0",
+                "prd": "M",
+                "trantype": "B" if action == "BUY" else "S",
+                "prctyp": "MKT",
+                "ret": "DAY"
+            }
+            
+            # Formatting request body as expected by SkyBroking/Noren Server: jData={...}&jKey=TOKEN
+            body_data = f"jData={json.dumps(payload_data)}&jKey={client['secret_code']}"
+            
+            headers = {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+            
             try:
-                api = SkyBrokingAPI()
+                resp = requests.post(SKY_ORDER_URL, data=body_data, headers=headers, timeout=12)
                 
-                # Session Set
-                session_res = api.set_session(
-                    userid=client['client_id'], 
-                    password='', 
-                    usertoken=client['secret_code']
-                )
-                
-                # Place Order
-                order_res = api.place_order(
-                    buy_or_sell='B' if action == 'BUY' else 'S',
-                    product_type='M',
-                    exchange='NFO',
-                    tradingsymbol=symbol,
-                    quantity=qty,
-                    discloseqty=0,
-                    price_type='MKT',
-                    price=0,
-                    retention='DAY'
-                )
-                
-                res = {
-                    "session_info": session_res,
-                    "order_info": order_res
-                }
-            except Exception as sdk_err:
-                res = {
-                    "error": str(sdk_err),
-                    "trace": traceback.format_exc()
-                }
+                # Handling Non-JSON or Raw Error Responses safely
+                if resp.status_code == 200 and resp.text:
+                    try:
+                        broker_res = resp.json()
+                    except Exception:
+                        broker_res = {"raw_response": resp.text}
+                else:
+                    broker_res = {
+                        "status_code": resp.status_code,
+                        "response_text": resp.text if resp.text else "Empty response from Broker Server"
+                    }
+            except Exception as req_err:
+                broker_res = {"error": str(req_err)}
 
             results.append({
                 "client": client['name'],
-                "broker_response": res
+                "broker_response": broker_res
             })
             
         return jsonify({"status": "Completed", "details": results}), 200
