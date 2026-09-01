@@ -1,12 +1,11 @@
 from flask import Flask, request, jsonify, render_template_string
-import requests
-import json
 import os
+from NorenRestApiPy.NorenApi import NorenApi
 
 app = Flask(__name__)
 
 # =========================================================
-# Client Accounts List
+# Client Accounts List (Updated with New Token)
 # =========================================================
 CLIENTS = [
     {
@@ -16,9 +15,6 @@ CLIENTS = [
         "lots": 1
     }
 ]
-
-# Sky Broking Direct PlaceOrder Endpoint
-SKY_ORDER_URL = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -93,39 +89,38 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # 1. Payload as required by Noren Engine API
-            payload = {
-                "uid": client['client_id'],
-                "actid": client['client_id'],
-                "exch": "NFO",
-                "tsym": symbol,
-                "qty": str(qty),
-                "prc": "0",
-                "prd": "M",
-                "trantype": action,
-                "prctyp": "MKT",
-                "ret": "DAY",
-                "ordersource": "API"
-            }
+            # API Initialization with Sky Broking Host
+            api = NorenApi(
+                host='https://skypro.skybroking.com/NorenWClientTP/',
+                websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
+            )
             
-            # 2. Convert to raw form-encoded string: jData={json}&jKey={token}
-            body_payload = f"jData={json.dumps(payload)}&jKey={client['secret_code']}"
-            
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-            
-            # 3. Direct Post Request (No SDK dependency)
-            response = requests.post(SKY_ORDER_URL, data=body_payload, headers=headers, timeout=15)
-            
+            # Injecting Session Token Safely
+            api._session_key = client['secret_code']
+            setattr(api, '_NorenApi__accountid', client['client_id'])
+            setattr(api, '_NorenApi__username', client['client_id'])
+
             try:
-                broker_res = response.json()
-            except Exception:
-                broker_res = {"raw_response": response.text, "http_status": response.status_code}
+                # Place Order Execution
+                res = api.place_order(
+                    buy_or_sell=action,
+                    product_type='M', 
+                    exchange='NFO',
+                    tradingsymbol=symbol,
+                    quantity=qty,
+                    discloseqty=0,
+                    price_type='MKT',
+                    price=0,
+                    trigger_price=None,
+                    retention='DAY',
+                    remarks='AlgoOrder'
+                )
+            except Exception as place_err:
+                res = {"error": str(place_err)}
             
             results.append({
                 "client": client['name'],
-                "broker_response": broker_res
+                "broker_response": res
             })
             
         return jsonify({"status": "Completed", "details": results}), 200
