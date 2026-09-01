@@ -29,7 +29,7 @@ HTML_PAGE = """
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; text-align: center; padding: 20px; }
         .card { background: #1e1e1e; max-width: 480px; margin: auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #333; background: #2a2a2a; color: #fff; font-size: 16px; text-align: center; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #333; background: #2a2a2a; color: #fff; font-size: 16px; text-align: center; text-transform: uppercase; }
         button { width: 95%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
         .btn-buy-ce { background: #00c853; color: white; }
         .btn-buy-pe { background: #d50000; color: white; }
@@ -43,8 +43,7 @@ HTML_PAGE = """
         <label>Enter Strike Price Symbol:</label>
         <input type="text" id="symbol" placeholder="E.g: NIFTY01SEP2624200PE">
         
-        <button class="btn-buy-ce" onclick="sendOrder('BUY')">BUY CALL (CE)</button>
-        <button class="btn-buy-pe" onclick="sendOrder('BUY')">BUY PUT (PE)</button>
+        <button class="btn-buy-ce" onclick="sendOrder('BUY')">BUY CALL / PUT</button>
         <hr style="border-color:#333;">
         <button class="btn-exit" onclick="sendOrder('SELL')">⚠️ SAFE EXIT ALL (SQUARE OFF)</button>
         
@@ -103,12 +102,11 @@ def manual_order():
                 "qty": str(qty),
                 "prc": "0",
                 "prd": "M",
-                "trantype": "B" if action == "BUY" else "S",
+                "trantype": action,
                 "prctyp": "MKT",
                 "ret": "DAY"
             }
             
-            # Formatting request body as expected by SkyBroking/Noren Server: jData={...}&jKey=TOKEN
             body_data = f"jData={json.dumps(payload_data)}&jKey={client['secret_code']}"
             
             headers = {
@@ -118,12 +116,12 @@ def manual_order():
             try:
                 resp = requests.post(SKY_ORDER_URL, data=body_data, headers=headers, timeout=12)
                 
-                # Handling Non-JSON or Raw Error Responses safely
-                if resp.status_code == 200 and resp.text:
+                # Safe Parsing to prevent JSONDecodeError crashes
+                if resp.status_code == 200 and resp.text.strip():
                     try:
                         broker_res = resp.json()
-                    except Exception:
-                        broker_res = {"raw_response": resp.text}
+                    except json.JSONDecodeError:
+                        broker_res = {"status": "Failed", "raw_response": resp.text}
                 else:
                     broker_res = {
                         "status_code": resp.status_code,
