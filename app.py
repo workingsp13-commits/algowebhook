@@ -94,12 +94,11 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # SDK-ல் User ID மற்றும் Session Key-ஐ சரியாக அமைக்கும் முறை
-            api.set_session(
-                userid=client['client_id'], 
-                password='', 
-                usertoken=client['secret_code']
-            )
+            # SDK பிரைவேட் வேரியபிள்களை நேரடியாக அமைக்கும் முறை
+            api._NorenApi__username = client['client_id']
+            api._NorenApi__accountid = client['client_id']
+            api._NorenApi__token = client['secret_code']
+            api._session_key = client['secret_code']
             
             # Place Order via Noren SDK
             res = api.place_order(
