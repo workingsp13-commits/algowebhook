@@ -89,33 +89,36 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # 1. Initialize API Object
+            # API Initialization
             api = NorenApi(
                 host='https://skypro.skybroking.com/NorenWClientTP/',
                 websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
             )
             
-            # 2. Set Session using official method (usertoken/jKey authentication)
-            api.set_session(
-                userid=client['client_id'],
-                password='',
-                usertoken=client['secret_code']
-            )
+            # Direct Session Key Injection (Bypasses set_session network call)
+            api._session_key = client['secret_code']
             
-            # 3. Place Order via SDK
-            res = api.place_order(
-                buy_or_sell=action,
-                product_type='M', 
-                exchange='NFO',
-                tradingsymbol=symbol,
-                quantity=qty,
-                discloseqty=0,
-                price_type='MKT',
-                price=0,
-                trigger_price=None,
-                retention='DAY',
-                remarks='AlgoOrder'
-            )
+            # Set internal credentials directly without network request
+            setattr(api, '_NorenApi__username', client['client_id'])
+            setattr(api, '_NorenApi__accountid', client['client_id'])
+
+            try:
+                # Place Order via SDK
+                res = api.place_order(
+                    buy_or_sell=action,
+                    product_type='M', 
+                    exchange='NFO',
+                    tradingsymbol=symbol,
+                    quantity=qty,
+                    discloseqty=0,
+                    price_type='MKT',
+                    price=0,
+                    trigger_price=None,
+                    retention='DAY',
+                    remarks='AlgoOrder'
+                )
+            except Exception as place_err:
+                res = {"error": str(place_err)}
             
             results.append({
                 "client": client['name'],
