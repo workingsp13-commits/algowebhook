@@ -13,7 +13,7 @@ CLIENTS = [
         "client_id": "SKY62341_U",
         "password": "Good@123",
         "factor2": "10071998",
-        "vc": "SKY62341_U_VC", # Vendor code
+        "vc": "SKY62341_U_VC",
         "app_key": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
         "imei": "abc1234",
         "lots": 1
@@ -93,15 +93,15 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Correct Host URL with trailing slash for NorenApi
+            # API Initialization using exact host path required by Sky Broking
             api = NorenApi(
-                host='https://skypro.skybroking.com/NorenWClientTP/',
+                host='https://skypro.skybroking.com/NorenWClientTP',
                 websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
             )
             
-            # Safe Login Exception Handling
             login_res = None
             try:
+                # Proper Noren API login
                 login_res = api.login(
                     userid=client['client_id'],
                     password=client['password'],
@@ -111,9 +111,9 @@ def manual_order():
                     imei=client['imei']
                 )
             except Exception as log_err:
-                login_res = {"stat": "Not_Ok", "emsg": f"Login Exception: {str(log_err)}"}
+                login_res = {"stat": "Not_Ok", "emsg": str(log_err)}
 
-            # Place Order if Login Succeeded
+            # If login succeeded
             if login_res and isinstance(login_res, dict) and login_res.get('stat') == 'Ok':
                 try:
                     order_res = api.place_order(
@@ -130,7 +130,7 @@ def manual_order():
                         remarks='AlgoOrder'
                     )
                 except Exception as ord_err:
-                    order_res = {"stat": "Not_Ok", "emsg": f"Order Exception: {str(ord_err)}"}
+                    order_res = {"stat": "Not_Ok", "emsg": str(ord_err)}
 
                 results.append({
                     "client": client['name'],
