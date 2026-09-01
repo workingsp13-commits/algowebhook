@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
-import requests
-import json
 import os
+from NorenRestApiPy.NorenApi import NorenApi
 
 app = Flask(__name__)
 
@@ -16,9 +15,6 @@ CLIENTS = [
         "lots": 1
     }
 ]
-
-# Official Sky Broking Order URL
-SKY_ORDER_URL = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -89,50 +85,41 @@ def manual_order():
         symbol = data.get('symbol')
         
         results = []
-        session = requests.Session()
         
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Exact Payload required by Noren Engine
-            payload_data = {
-                "uid": client['client_id'],
-                "actid": client['client_id'],
-                "exch": "NFO",
-                "tsym": symbol,
-                "qty": str(qty),
-                "prc": "0",
-                "prd": "M",
-                "trantype": action,
-                "prctyp": "MKT",
-                "ret": "DAY"
-            }
+            # Create fresh NorenApi Instance per order request to avoid session conflicts
+            api = NorenApi(
+                host='https://skypro.skybroking.com/NorenWClientTP/',
+                websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
+            )
             
-            # Form Payload: jData={...}&jKey=TOKEN
-            body_str = f"jData={json.dumps(payload_data)}&jKey={client['secret_code']}"
-            
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            }
-            
-            try:
-                resp = session.post(SKY_ORDER_URL, data=body_str, headers=headers, timeout=15)
-                
-                # Handling raw server responses safely
-                try:
-                    broker_res = resp.json()
-                except Exception:
-                    broker_res = {
-                        "http_code": resp.status_code,
-                        "raw_response": resp.text if resp.text else "Empty Response from Broker Server"
-                    }
-            except Exception as req_err:
-                broker_res = {"error": str(req_err)}
+            # Manual Session Injection compatible with Sky Broking Noren Architecture
+            api._NorenApi__username = client['client_id']
+            api._NorenApi__accountid = client['client_id']
+            api._NorenApi__password = ""
+            api._NorenApi__susertoken = client['secret_code']
+            api._session_key = client['secret_code']
 
+            # Place Order via SDK Method
+            res = api.place_order(
+                buy_or_sell=action,
+                product_type='M', 
+                exchange='NFO',
+                tradingsymbol=symbol,
+                quantity=qty,
+                discloseqty=0,
+                price_type='MKT',
+                price=0,
+                trigger_price=None,
+                retention='DAY',
+                remarks='AlgoOrder'
+            )
+            
             results.append({
                 "client": client['name'],
-                "broker_response": broker_res
+                "broker_response": res
             })
             
         return jsonify({"status": "Completed", "details": results}), 200
