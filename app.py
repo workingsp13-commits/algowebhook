@@ -89,20 +89,20 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Create fresh NorenApi Instance per order request to avoid session conflicts
+            # 1. Initialize API Object
             api = NorenApi(
                 host='https://skypro.skybroking.com/NorenWClientTP/',
                 websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
             )
             
-            # Manual Session Injection compatible with Sky Broking Noren Architecture
-            api._NorenApi__username = client['client_id']
-            api._NorenApi__accountid = client['client_id']
-            api._NorenApi__password = ""
-            api._NorenApi__susertoken = client['secret_code']
-            api._session_key = client['secret_code']
-
-            # Place Order via SDK Method
+            # 2. Set Session using official method (usertoken/jKey authentication)
+            api.set_session(
+                userid=client['client_id'],
+                password='',
+                usertoken=client['secret_code']
+            )
+            
+            # 3. Place Order via SDK
             res = api.place_order(
                 buy_or_sell=action,
                 product_type='M', 
