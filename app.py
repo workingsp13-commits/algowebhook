@@ -19,7 +19,7 @@ CLIENTS = [
     }
 ]
 
-# Sky Broking Endpoints
+# Sky Broking Correct API Base Endpoint
 SKY_BASE_URL = "https://skypro.skybroking.com/NorenWClientTP"
 
 HTML_PAGE = """
@@ -59,7 +59,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Authenticating & Executing Order...";
+            document.getElementById('status').innerText = "Connecting to Sky Broking Server...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -87,7 +87,7 @@ def home():
 def manual_order():
     try:
         data = request.json
-        action = data.get('action') # 'B' or 'S'
+        action = data.get('action')
         symbol = data.get('symbol')
         
         results = []
@@ -95,14 +95,13 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Using Session to retain headers & cookies properly
             http_session = requests.Session()
             http_session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'NorenApi/Python',
                 'Content-Type': 'application/x-www-form-urlencoded'
             })
 
-            # STEP 1: Authenticate and get Token via QuickLogin
+            # 1. QuickAuth Request (Noren Standard Login)
             login_payload = {
                 "uid": client['client_id'],
                 "pwd": client['password'],
@@ -113,19 +112,20 @@ def manual_order():
                 "source": "API"
             }
             
-            login_data_str = f"jData={json.dumps(login_payload)}"
-            login_url = f"{SKY_BASE_URL}/QuickAuth"
+            login_body = f"jData={json.dumps(login_payload)}"
             
-            login_resp = http_session.post(login_url, data=login_data_str, timeout=10)
+            # Request to QuickAuth
+            login_resp = http_session.post(f"{SKY_BASE_URL}/QuickAuth", data=login_body, timeout=15)
             
             try:
                 login_json = login_resp.json()
             except Exception:
-                login_json = {}
+                login_json = {"raw_text": login_resp.text, "status_code": login_resp.status_code}
 
-            token = login_json.get('token') or client['app_key']
+            # Extract Token or fallback to AppKey
+            token = login_json.get('susertoken') or login_json.get('token') or client['app_key']
 
-            # STEP 2: Place Order using the Authenticated Session Token
+            # 2. Place Order Request
             order_payload = {
                 "uid": client['client_id'],
                 "actid": client['client_id'],
@@ -140,10 +140,8 @@ def manual_order():
                 "ordersource": "API"
             }
             
-            order_data_str = f"jData={json.dumps(order_payload)}&jKey={token}"
-            order_url = f"{SKY_BASE_URL}/PlaceOrder"
-            
-            order_resp = http_session.post(order_url, data=order_data_str, timeout=10)
+            order_body = f"jData={json.dumps(order_payload)}&jKey={token}"
+            order_resp = http_session.post(f"{SKY_BASE_URL}/PlaceOrder", data=order_body, timeout=15)
             
             try:
                 broker_res = order_resp.json()
@@ -151,7 +149,7 @@ def manual_order():
                 broker_res = {
                     "http_status": order_resp.status_code,
                     "response_text": order_resp.text,
-                    "login_attempt_response": login_json
+                    "login_attempt": login_json
                 }
             
             results.append({
