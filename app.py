@@ -1,24 +1,24 @@
 from flask import Flask, request, jsonify, render_template_string
-import requests
-import json
 import os
+from NorenRestApiPy.NorenApi import NorenApi
 
 app = Flask(__name__)
 
 # =========================================================
-# Client Accounts List
+# Client Accounts Configuration
 # =========================================================
 CLIENTS = [
     {
         "name": "Admin (Prasanth)",
         "client_id": "SKY62341_U",
-        "secret_code": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
+        "password": "Good@123",
+        "factor2": "10071998",
+        "vc": "SKY62341_U_VC",
+        "app_key": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
+        "imei": "abc1234",
         "lots": 1
     }
 ]
-
-# Sky Broking Direct PlaceOrder Endpoint
-SKY_ORDER_URL = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -57,7 +57,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Sending Order to Sky Broking Server...";
+            document.getElementById('status').innerText = "Connecting & Sending Order...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -93,41 +93,48 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Payload array required by Noren Engine API
-            payload = {
-                "uid": client['client_id'],
-                "actid": client['client_id'],
-                "exch": "NFO",
-                "tsym": symbol,
-                "qty": str(qty),
-                "prc": "0",
-                "prd": "M",
-                "trantype": action,
-                "prctyp": "MKT",
-                "ret": "DAY",
-                "ordersource": "API"
-            }
+            # Initialize NorenApi Instance
+            api = NorenApi(
+                host='https://skypro.skybroking.com/NorenWClientTP',
+                websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
+            )
             
-            # Format as: jData={JSON_STRING}&jKey={SESSION_TOKEN}
-            body_payload = f"jData={json.dumps(payload)}&jKey={client['secret_code']}"
+            # Step 1: Login Session Auth
+            login_res = api.login(
+                userid=client['client_id'],
+                password=client['password'],
+                twoFA=client['factor2'],
+                vendor_code=client['vc'],
+                api_secret=client['app_key'],
+                imei=client['imei']
+            )
             
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            }
-            
-            # Sending direct HTTP POST request bypassing buggy Noren SDK
-            response = requests.post(SKY_ORDER_URL, data=body_payload, headers=headers, timeout=15)
-            
-            try:
-                broker_res = response.json()
-            except Exception:
-                broker_res = {"raw_response": response.text, "http_status": response.status_code}
-            
-            results.append({
-                "client": client['name'],
-                "broker_response": broker_res
-            })
+            if login_res and login_res.get('stat') == 'Ok':
+                # Step 2: Place Order with Valid Session
+                order_res = api.place_order(
+                    buy_or_sell=action,
+                    product_type='M', 
+                    exchange='NFO',
+                    tradingsymbol=symbol,
+                    quantity=qty,
+                    discloseqty=0,
+                    price_type='MKT',
+                    price=0,
+                    trigger_price=None,
+                    retention='DAY',
+                    remarks='AlgoOrder'
+                )
+                results.append({
+                    "client": client['name'],
+                    "login_status": "Success",
+                    "broker_response": order_res
+                })
+            else:
+                results.append({
+                    "client": client['name'],
+                    "login_status": "Failed",
+                    "broker_response": login_res
+                })
             
         return jsonify({"status": "Completed", "details": results}), 200
 
