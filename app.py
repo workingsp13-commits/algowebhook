@@ -13,7 +13,7 @@ CLIENTS = [
         "client_id": "SKY62341_U",
         "password": "Good@123",
         "factor2": "10071998",
-        "vc": "SKY62341_U_VC",
+        "vc": "SKY62341_U_VC", # Vendor code
         "app_key": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
         "imei": "abc1234",
         "lots": 1
@@ -57,7 +57,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Connecting & Sending Order...";
+            document.getElementById('status').innerText = "Logging in & Executing Order...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -93,37 +93,45 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Initialize NorenApi Instance
+            # Correct Host URL with trailing slash for NorenApi
             api = NorenApi(
-                host='https://skypro.skybroking.com/NorenWClientTP',
+                host='https://skypro.skybroking.com/NorenWClientTP/',
                 websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
             )
             
-            # Step 1: Login Session Auth
-            login_res = api.login(
-                userid=client['client_id'],
-                password=client['password'],
-                twoFA=client['factor2'],
-                vendor_code=client['vc'],
-                api_secret=client['app_key'],
-                imei=client['imei']
-            )
-            
-            if login_res and login_res.get('stat') == 'Ok':
-                # Step 2: Place Order with Valid Session
-                order_res = api.place_order(
-                    buy_or_sell=action,
-                    product_type='M', 
-                    exchange='NFO',
-                    tradingsymbol=symbol,
-                    quantity=qty,
-                    discloseqty=0,
-                    price_type='MKT',
-                    price=0,
-                    trigger_price=None,
-                    retention='DAY',
-                    remarks='AlgoOrder'
+            # Safe Login Exception Handling
+            login_res = None
+            try:
+                login_res = api.login(
+                    userid=client['client_id'],
+                    password=client['password'],
+                    twoFA=client['factor2'],
+                    vendor_code=client['vc'],
+                    api_secret=client['app_key'],
+                    imei=client['imei']
                 )
+            except Exception as log_err:
+                login_res = {"stat": "Not_Ok", "emsg": f"Login Exception: {str(log_err)}"}
+
+            # Place Order if Login Succeeded
+            if login_res and isinstance(login_res, dict) and login_res.get('stat') == 'Ok':
+                try:
+                    order_res = api.place_order(
+                        buy_or_sell=action,
+                        product_type='M', 
+                        exchange='NFO',
+                        tradingsymbol=symbol,
+                        quantity=qty,
+                        discloseqty=0,
+                        price_type='MKT',
+                        price=0,
+                        trigger_price=None,
+                        retention='DAY',
+                        remarks='AlgoOrder'
+                    )
+                except Exception as ord_err:
+                    order_res = {"stat": "Not_Ok", "emsg": f"Order Exception: {str(ord_err)}"}
+
                 results.append({
                     "client": client['name'],
                     "login_status": "Success",
