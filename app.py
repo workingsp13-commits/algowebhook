@@ -19,8 +19,12 @@ CLIENTS = [
     }
 ]
 
-# Sky Broking Correct API Base Endpoint
-SKY_BASE_URL = "https://skypro.skybroking.com/NorenWClientTP"
+# Possible Sky Broking Base URLs to test bypass
+POSSIBLE_URLS = [
+    "https://skypro.skybroking.com/NorenWClientTP",
+    "https://skybroking.com/NorenWClientTP",
+    "https://api.skybroking.com/NorenWClientTP"
+]
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -59,7 +63,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Connecting to Sky Broking Server...";
+            document.getElementById('status').innerText = "Testing Brokers endpoints & Sending Order...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -94,64 +98,55 @@ def manual_order():
         
         for client in CLIENTS:
             qty = client['lots'] * 50
+            broker_res = None
             
             http_session = requests.Session()
             http_session.headers.update({
-                'User-Agent': 'NorenApi/Python',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                 'Content-Type': 'application/x-www-form-urlencoded'
             })
 
-            # 1. QuickAuth Request (Noren Standard Login)
-            login_payload = {
-                "uid": client['client_id'],
-                "pwd": client['password'],
-                "factor2": client['factor2'],
-                "vc": client['client_id'],
-                "appkey": client['app_key'],
-                "imei": "abc1234",
-                "source": "API"
-            }
-            
-            login_body = f"jData={json.dumps(login_payload)}"
-            
-            # Request to QuickAuth
-            login_resp = http_session.post(f"{SKY_BASE_URL}/QuickAuth", data=login_body, timeout=15)
-            
-            try:
-                login_json = login_resp.json()
-            except Exception:
-                login_json = {"raw_text": login_resp.text, "status_code": login_resp.status_code}
-
-            # Extract Token or fallback to AppKey
-            token = login_json.get('susertoken') or login_json.get('token') or client['app_key']
-
-            # 2. Place Order Request
-            order_payload = {
-                "uid": client['client_id'],
-                "actid": client['client_id'],
-                "exch": "NFO",
-                "tsym": symbol,
-                "qty": str(qty),
-                "prc": "0",
-                "prd": "M",
-                "trantype": action,
-                "prctyp": "MKT",
-                "ret": "DAY",
-                "ordersource": "API"
-            }
-            
-            order_body = f"jData={json.dumps(order_payload)}&jKey={token}"
-            order_resp = http_session.post(f"{SKY_BASE_URL}/PlaceOrder", data=order_body, timeout=15)
-            
-            try:
-                broker_res = order_resp.json()
-            except Exception:
-                broker_res = {
-                    "http_status": order_resp.status_code,
-                    "response_text": order_resp.text,
-                    "login_attempt": login_json
+            for base_url in POSSIBLE_URLS:
+                login_payload = {
+                    "uid": client['client_id'],
+                    "pwd": client['password'],
+                    "factor2": client['factor2'],
+                    "vc": client['client_id'],
+                    "appkey": client['app_key'],
+                    "imei": "abc1234",
+                    "source": "API"
                 }
-            
+                
+                try:
+                    # Try login
+                    login_resp = http_session.post(f"{base_url}/QuickAuth", data=f"jData={json.dumps(login_payload)}", timeout=5)
+                    
+                    if login_resp.status_code == 200:
+                        login_json = login_resp.json()
+                        token = login_json.get('susertoken') or login_json.get('token') or client['app_key']
+                        
+                        order_payload = {
+                            "uid": client['client_id'],
+                            "actid": client['client_id'],
+                            "exch": "NFO",
+                            "tsym": symbol,
+                            "qty": str(qty),
+                            "prc": "0",
+                            "prd": "M",
+                            "trantype": action,
+                            "prctyp": "MKT",
+                            "ret": "DAY",
+                            "ordersource": "API"
+                        }
+                        
+                        order_resp = http_session.post(f"{base_url}/PlaceOrder", data=f"jData={json.dumps(order_payload)}&jKey={token}", timeout=5)
+                        broker_res = {"used_url": base_url, "response": order_resp.json() if order_resp.status_code == 200 else order_resp.text}
+                        break
+                    else:
+                        broker_res = {"failed_url": base_url, "status": login_resp.status_code}
+                except Exception as e:
+                    broker_res = {"failed_url": base_url, "error": str(e)}
+
             results.append({
                 "client": client['name'],
                 "broker_response": broker_res
