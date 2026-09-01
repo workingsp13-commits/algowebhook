@@ -16,7 +16,7 @@ CLIENTS = [
     }
 ]
 
-# Initialize Noren API
+# Noren API Initialize
 api = NorenApi(
     host='https://skypro.skybroking.com/NorenWClientTP/',
     websocket='wss://skypro.skybroking.com/NorenWClientTPWS/'
@@ -94,13 +94,17 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Direct session key set for Noren SDK
-            api._session_key = client['secret_code']
+            # SDK-ல் User ID மற்றும் Session Key-ஐ சரியாக அமைக்கும் முறை
+            api.set_session(
+                userid=client['client_id'], 
+                password='', 
+                usertoken=client['secret_code']
+            )
             
-            # Place Order via SDK
+            # Place Order via Noren SDK
             res = api.place_order(
                 buy_or_sell=action,
-                product_type='M', # Product type: M (MIS/Normal)
+                product_type='M', 
                 exchange='NFO',
                 tradingsymbol=symbol,
                 quantity=qty,
