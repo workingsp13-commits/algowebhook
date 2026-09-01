@@ -12,13 +12,15 @@ CLIENTS = [
     {
         "name": "Admin (Prasanth)",
         "client_id": "SKY62341_U",
-        "secret_code": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
+        "password": "Good@123",
+        "factor2": "10071998",
+        "app_key": "brrHxkaGmkoALkDdbpiaHImbX3BIPx48d3LrdRqOgaLODopaapkoDjaMqNMpX4dX",
         "lots": 1
     }
 ]
 
-# Correct Sky Broking Noren API Endpoint
-SKY_ORDER_URL = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"
+# Sky Broking Endpoints
+SKY_BASE_URL = "https://skypro.skybroking.com/NorenWClientTP"
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -57,7 +59,7 @@ HTML_PAGE = """
                 return;
             }
             
-            document.getElementById('status').innerText = "Sending Order to Broker...";
+            document.getElementById('status').innerText = "Authenticating & Executing Order...";
 
             try {
                 let response = await fetch('/manual-order', {
@@ -93,8 +95,38 @@ def manual_order():
         for client in CLIENTS:
             qty = client['lots'] * 50
             
-            # Payload array required by Noren Engine API
-            payload = {
+            # Using Session to retain headers & cookies properly
+            http_session = requests.Session()
+            http_session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            })
+
+            # STEP 1: Authenticate and get Token via QuickLogin
+            login_payload = {
+                "uid": client['client_id'],
+                "pwd": client['password'],
+                "factor2": client['factor2'],
+                "vc": client['client_id'],
+                "appkey": client['app_key'],
+                "imei": "abc1234",
+                "source": "API"
+            }
+            
+            login_data_str = f"jData={json.dumps(login_payload)}"
+            login_url = f"{SKY_BASE_URL}/QuickAuth"
+            
+            login_resp = http_session.post(login_url, data=login_data_str, timeout=10)
+            
+            try:
+                login_json = login_resp.json()
+            except Exception:
+                login_json = {}
+
+            token = login_json.get('token') or client['app_key']
+
+            # STEP 2: Place Order using the Authenticated Session Token
+            order_payload = {
                 "uid": client['client_id'],
                 "actid": client['client_id'],
                 "exch": "NFO",
@@ -105,23 +137,22 @@ def manual_order():
                 "trantype": action,
                 "prctyp": "MKT",
                 "ret": "DAY",
-                "ordersource": "MOB"
+                "ordersource": "API"
             }
             
-            # Form Data Format required by Sky Broking Noren Engine
-            payload_str = f"jData={json.dumps(payload)}&jKey={client['secret_code']}"
+            order_data_str = f"jData={json.dumps(order_payload)}&jKey={token}"
+            order_url = f"{SKY_BASE_URL}/PlaceOrder"
             
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-            
-            # Direct HTTP POST Request bypassing buggy Noren SDK Login
-            response = requests.post(SKY_ORDER_URL, data=payload_str, headers=headers, timeout=15)
+            order_resp = http_session.post(order_url, data=order_data_str, timeout=10)
             
             try:
-                broker_res = response.json()
+                broker_res = order_resp.json()
             except Exception:
-                broker_res = {"status_code": response.status_code, "response_text": response.text}
+                broker_res = {
+                    "http_status": order_resp.status_code,
+                    "response_text": order_resp.text,
+                    "login_attempt_response": login_json
+                }
             
             results.append({
                 "client": client['name'],
